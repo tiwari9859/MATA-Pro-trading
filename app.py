@@ -3,20 +3,24 @@ import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
 import requests
+import feedparser
 
-# Telegram Alert Function
+# 1. Telegram Alert Function
 def send_telegram_alert(message):
-    token = "YOUR_BOT_TOKEN"
-    chat_id = "YOUR_CHAT_ID"
+    token = "YOUR_BOT_TOKEN"  # Apna Token yahan daalein
+    chat_id = "YOUR_CHAT_ID"  # Apni Chat ID yahan daalein
     url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={message}"
     requests.get(url)
 
 st.set_page_config(layout="wide")
-st.title("📈 Sachin-Trader-Pro: Advanced Setup")
+st.title("📈 Sachin-Trader-Pro Master Terminal")
+
+# Sidebar
+ticker = st.sidebar.text_input("Enter Asset", "BTC-USD")
+tf = st.sidebar.selectbox("Select Timeframe", ["1h", "4h", "1d"])
 
 # Data Fetching
-ticker = st.sidebar.text_input("Enter Asset", "BTC-USD")
-df = yf.download(ticker, period="5d", interval="1h")
+df = yf.download(ticker, period="5d", interval=tf)
 if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
 
 # Calculations
@@ -24,28 +28,41 @@ df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
 df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
 df['Vol_Avg'] = df['Volume'].rolling(window=20).mean()
 
-# Support & Resistance (Pivot Points)
+# S&R
 pivot = (df['High'].iloc[-2] + df['Low'].iloc[-2] + df['Close'].iloc[-2]) / 3
 support = pivot - (df['High'].iloc[-2] - df['Low'].iloc[-2])
 resistance = pivot + (df['High'].iloc[-2] - df['Low'].iloc[-2])
 
-# Logic with Volume & Support/Resistance
-current_vol = df['Volume'].iloc[-1]
-avg_vol = df['Vol_Avg'].iloc[-1]
-is_high_volume = current_vol > avg_vol
+# Price & Signal
+current_price = df['Close'].iloc[-1]
+st.metric(label=f"LIVE PRICE: {ticker}", value=f"${current_price:,.2f}")
 
-# Signal Alert
-if df['EMA9'].iloc[-1] > df['EMA20'].iloc[-1] and is_high_volume:
-    st.success(f"🚀 BUY SIGNAL! High Volume Breakout. Resistance Target: ${resistance:.2f}")
-elif df['EMA9'].iloc[-1] < df['EMA20'].iloc[-1] and is_high_volume:
-    st.error(f"⚠️ SELL SIGNAL! High Volume Drop. Support Target: ${support:.2f}")
+# Alert & Signal Logic (Track change)
+if 'last_status' not in st.session_state: st.session_state.last_status = None
+current_status = "BULLISH" if df['EMA9'].iloc[-1] > df['EMA20'].iloc[-1] else "BEARISH"
+is_high_volume = df['Volume'].iloc[-1] > df['Vol_Avg'].iloc[-1]
 
-# Chart
-fig = go.Figure()
-fig.add_trace(go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'], name='Market'))
-fig.add_trace(go.Scatter(x=df.index, y=df['EMA9'], name='EMA 9', line=dict(color='yellow')))
-fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], name='EMA 20', line=dict(color='blue')))
-st.plotly_chart(fig, use_container_width=True)
+if st.session_state.last_status is not None and st.session_state.last_status != current_status and is_high_volume:
+    msg = f"🚀 SETUP BAN GAYA! {ticker} is {current_status}. Target: {resistance if current_status=='BULLISH' else support:.2f}"
+    send_telegram_alert(msg)
+st.session_state.last_status = current_status
 
-st.write(f"📊 *Volume Check*: {'HIGH (Volume confirmed)' if is_high_volume else 'LOW (Wait for volume)'}")
-st.write(f"🎯 *Support: ${support:.2f} | **Resistance*: ${resistance:.2f}")
+# UI Layout
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    fig = go.Figure(data=[go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'])])
+    fig.add_trace(go.Scatter(x=df.index, y=df['EMA9'], name='EMA 9', line=dict(color='yellow')))
+    fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], name='EMA 20', line=dict(color='blue')))
+    fig.update_layout(height=500, template="plotly_dark")
+    st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    st.subheader("📊 Setup")
+    st.write(f"*Status*: {current_status}")
+    st.write(f"*Support*: ${support:.2f}")
+    st.write(f"*Resistance*: ${resistance:.2f}")
+    
+    with st.expander("📰 Latest News"):
+        news = feedparser.parse("https://cointelegraph.com/rss")
+        for entry in news.entries[:3]: st.write(f"🔹 {entry.title}")
