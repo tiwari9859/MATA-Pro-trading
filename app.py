@@ -59,7 +59,7 @@ if not df.empty:
     st.plotly_chart(fig, use_container_width=True)
     
     # Auto-update
-    time.sleep(30)
+    time.sleep(10)
     st.rerun()
 else:
     st.error("Data load nahi ho raha.")
