@@ -1,6 +1,6 @@
 streamlit
-yfinance
-pandas
-plotly
-streamlit-autorefresh
-requests
+​yfinance
+​pandas
+​plotly
+​streamlit-autorefresh
+​feedparser
