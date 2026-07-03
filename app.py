@@ -5,19 +5,27 @@ import pandas as pd
 import requests
 import feedparser
 
-# 1. Telegram Alert Function
+# Telegram Alert Function
 def send_telegram_alert(message):
-    token = "YOUR_BOT_TOKEN"  # Apna Token yahan daalein
-    chat_id = "YOUR_CHAT_ID"  # Apni Chat ID yahan daalein
+    token = "YOUR_BOT_TOKEN" 
+    chat_id = "YOUR_CHAT_ID"
     url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={message}"
     requests.get(url)
 
 st.set_page_config(layout="wide")
 st.title("📈 Sachin-Trader-Pro Master Terminal")
 
-# Sidebar
+# Sidebar - Timeframe ke neeche News
 ticker = st.sidebar.text_input("Enter Asset", "BTC-USD")
 tf = st.sidebar.selectbox("Select Timeframe", ["1h", "4h", "1d"])
+
+st.sidebar.subheader("📰 Latest Market News")
+try:
+    news_feed = feedparser.parse("https://cointelegraph.com/rss")
+    for entry in news_feed.entries[:3]:
+        st.sidebar.caption(f"🔹 {entry.title}")
+except:
+    st.sidebar.write("News feed unavailable.")
 
 # Data Fetching
 df = yf.download(ticker, period="5d", interval=tf)
@@ -37,32 +45,25 @@ resistance = pivot + (df['High'].iloc[-2] - df['Low'].iloc[-2])
 current_price = df['Close'].iloc[-1]
 st.metric(label=f"LIVE PRICE: {ticker}", value=f"${current_price:,.2f}")
 
-# Alert & Signal Logic (Track change)
+# Alert & Signal Logic
 if 'last_status' not in st.session_state: st.session_state.last_status = None
 current_status = "BULLISH" if df['EMA9'].iloc[-1] > df['EMA20'].iloc[-1] else "BEARISH"
 is_high_volume = df['Volume'].iloc[-1] > df['Vol_Avg'].iloc[-1]
 
 if st.session_state.last_status is not None and st.session_state.last_status != current_status and is_high_volume:
-    msg = f"🚀 SETUP BAN GAYA! {ticker} is {current_status}. Target: {resistance if current_status=='BULLISH' else support:.2f}"
+    msg = f"🚀 SETUP BAN GAYA! {ticker} {current_status}. Target: {resistance if current_status=='BULLISH' else support:.2f}"
     send_telegram_alert(msg)
 st.session_state.last_status = current_status
 
-# UI Layout
-col1, col2 = st.columns([3, 1])
+# Main Chart (Pro Look)
+fig = go.Figure(data=[go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'])])
+fig.add_trace(go.Scatter(x=df.index, y=df['EMA9'], name='EMA 9', line=dict(color='#FFD700', width=2)))
+fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], name='EMA 20', line=dict(color='#1E90FF', width=2)))
+fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=20, r=20, t=20, b=20))
+st.plotly_chart(fig, use_container_width=True)
 
-with col1:
-    fig = go.Figure(data=[go.Candlestick(x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'])])
-    fig.add_trace(go.Scatter(x=df.index, y=df['EMA9'], name='EMA 9', line=dict(color='yellow')))
-    fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], name='EMA 20', line=dict(color='blue')))
-    fig.update_layout(height=500, template="plotly_dark")
-    st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    st.subheader("📊 Setup")
-    st.write(f"*Status*: {current_status}")
-    st.write(f"*Support*: ${support:.2f}")
-    st.write(f"*Resistance*: ${resistance:.2f}")
-    
-    with st.expander("📰 Latest News"):
-        news = feedparser.parse("https://cointelegraph.com/rss")
-        for entry in news.entries[:3]: st.write(f"🔹 {entry.title}")
+# Footer Setup info
+col1, col2, col3 = st.columns(3)
+col1.metric("Status", current_status)
+col2.metric("Support", f"${support:.2f}")
+col3.metric("Resistance", f"${resistance:.2f}")
