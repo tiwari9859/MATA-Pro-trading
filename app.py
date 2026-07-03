@@ -7,8 +7,8 @@ import feedparser
 
 # Telegram Alert Function
 def send_telegram_alert(message):
-    token = "YOUR_BOT_TOKEN" 
-    chat_id = "YOUR_CHAT_ID"
+    token = "8666809875:AAE_BxvQ0t54uOSTSaujZQmqQnM9gWMkdbg" 
+    chat_id = "8963973514"
     url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={chat_id}&text={message}"
     requests.get(url)
 
