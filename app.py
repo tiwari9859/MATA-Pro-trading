@@ -1,46 +1,56 @@
 import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
-import pandas as pd
+import time
 
 st.set_page_config(layout="wide")
 st.title("Sachin-Trader-Pro Master Terminal")
 
-# 1. Sidebar
-ticker = st.sidebar.selectbox("Enter Asset", ["BTC-USD", "ETH-USD"])
+# Auto-refresh mechanism (30 seconds)
+if "last_update" not in st.session_state:
+    st.session_state.last_update = time.time()
+
+# Sidebar
+ticker = st.sidebar.selectbox("Select Asset", ["BTC-USD", "ETH-USD"])
 timeframe = st.sidebar.selectbox("Select Timeframe", ["1h", "4h", "1d"])
 
-# 2. Data Fetching
-df = yf.download(ticker, period="1mo", interval=timeframe)
+def get_data(symbol, tf):
+    df = yf.download(symbol, period="5d", interval=tf)
+    if not df.empty:
+        df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
+        df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+    return df
+
+# Data Fetch
+df = get_data(ticker, timeframe)
 
 if not df.empty:
-    # Price Fix
     current_price = df['Close'].iloc[-1].item()
-    st.metric(label=f"LIVE PRICE: {ticker}", value=f"${current_price:,.2f}")
+    ema9 = df['EMA9'].iloc[-1].item()
+    ema20 = df['EMA20'].iloc[-1].item()
 
-    # 3. Indicators (EMA)
-    df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
-    df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+    # 1. Price & Trend Info
+    col1, col2, col3 = st.columns(3)
+    col1.metric("LIVE PRICE", f"${current_price:,.2f}")
+    
+    trend = "BULLISH" if ema9 > ema20 else "BEARISH"
+    col2.metric("MARKET TREND", trend)
+    col3.metric("RANGE (High-Low)", f"${(df['High'].max() - df['Low'].min()):,.2f}")
 
-    # 4. Chart with EMA & SR lines
-    fig = go.Figure(data=[go.Candlestick(x=df.index,
-                    open=df['Open'].squeeze(), high=df['High'].squeeze(),
-                    low=df['Low'].squeeze(), close=df['Close'].squeeze())])
-    
-    # Add EMAs
-    fig.add_trace(go.Scatter(x=df.index, y=df['EMA9'], name='EMA 9', line=dict(color='blue', width=1)))
-    fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], name='EMA 20', line=dict(color='orange', width=1)))
-    
+    # 2. Chart
+    fig = go.Figure(data=[go.Candlestick(x=df.index, open=df['Open'].iloc[:,0], high=df['High'].iloc[:,0], low=df['Low'].iloc[:,0], close=df['Close'].iloc[:,0])])
+    fig.add_trace(go.Scatter(x=df.index, y=df['EMA9'].iloc[:,0], name='EMA 9', line=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'].iloc[:,0], name='EMA 20', line=dict(color='orange')))
     st.plotly_chart(fig, use_container_width=True)
 
-    # 5. News Section
+    # 3. News
     st.subheader(f"Latest News for {ticker}")
-    ticker_obj = yf.Ticker(ticker)
-    try:
-        news = ticker_obj.news
-        for item in news[:5]:
-            st.write(f"*{item['title']}* - [Read]({item['link']})")
-    except:
-        st.write("News filhal load nahi ho rahi.")
+    news = yf.Ticker(ticker).news
+    for item in news[:5]:
+        st.write(f"*{item['title']}* - [Read More]({item['link']})")
+
+    # Auto Refresh logic
+    time.sleep(30)
+    st.rerun()
 else:
     st.error("Data load nahi ho raha.")
