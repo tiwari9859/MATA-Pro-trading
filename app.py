@@ -61,5 +61,3 @@ if not df.empty:
     # Auto-update
     time.sleep(10)
     st.rerun()
-else:
-    st.error("Data load nahi ho raha.")
