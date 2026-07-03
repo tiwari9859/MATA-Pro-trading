@@ -24,4 +24,21 @@ def check_signals(ticker):
         curr_price = float(df['Close'].iloc[-1])
         ema9 = float(df['EMA9'].iloc[-1])
         ema20 = float(df['EMA20'].iloc[-1])
-…
+        
+        if (curr_price > ema9) and (ema9 > ema20):
+            return f"🚀 BULLISH BTC: Price {curr_price:.2f} > 9EMA"
+        if (curr_price < ema20) and (ema9 < ema20):
+            return f"📉 BEARISH BTC: Price {curr_price:.2f} < 20EMA"
+    except:
+        return None
+    return None
+
+st.title("Sachin-Pro: Live Status")
+if st.button("Activate Trade Bot"):
+    st.success("Engine is running...")
+    send_msg("Bot Started Successfully!")
+    while True:
+        signal = check_signals("BTC-USD")
+        if signal:
+            send_msg(signal)
+        time.sleep(60)
