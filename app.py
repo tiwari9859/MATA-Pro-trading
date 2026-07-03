@@ -1,66 +1,35 @@
-import streamlit as st
-import yfinance as yf
-import requests
-import time
-
-# Aapki Details
-TOKEN = "8666809875:AAE_BxvQ0t54uOSTSaujZQmqQnM9gWMkdbg"
-CHAT_ID = "8963973514"
-
-def send_msg(text):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={text}"
-    requests.get(url)
-
-def calculate_trade_levels(df, type):
-    last_row = df.iloc[-1]
-    # Risk Reward 1:2 logic
-    if type == "BUY":
-        sl = last_row['Low'] - (last_row['Close'] * 0.003)
-        tp = last_row['Close'] + ((last_row['Close'] - sl) * 2)
-        return sl, tp
-    else:
-        sl = last_row['High'] + (last_row['Close'] * 0.003)
-        tp = last_row['Close'] - ((sl - last_row['Close']) * 2)
-        return sl, tp
-
 def check_signals(ticker):
     df = yf.download(ticker, period="10d", interval="1h")
+    # Yahan hum memastikan kar rahe hain ki data sahi format mein hai
     df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
     df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
     
-    # Pivot calculation
-    p = (df['High'].iloc[-2] + df['Low'].iloc[-2] + df['Close'].iloc[-2]) / 3
-    s1 = (2 * p) - df['High'].iloc[-2]
-    r1 = (2 * p) - df['Low'].iloc[-2]
+    # Pivot logic ko fix kiya taaki error na aaye
+    last_idx = -1
+    prev_idx = -2
     
-    curr_price = df['Close'].iloc[-1]
-    ema9 = df['EMA9'].iloc[-1]
-    ema20 = df['EMA20'].iloc[-1]
+    curr_price = float(df['Close'].iloc[last_idx])
+    ema9 = float(df['EMA9'].iloc[last_idx])
+    ema20 = float(df['EMA20'].iloc[last_idx])
     
-    # BULLISH: Price > 9EMA and 9EMA > 20EMA + Near Support
+    # Pivot points calculate karte waqt .item() use karenge taaki value error na ho
+    high_prev = float(df['High'].iloc[prev_idx])
+    low_prev = float(df['Low'].iloc[prev_idx])
+    close_prev = float(df['Close'].iloc[prev_idx])
+    
+    p = (high_prev + low_prev + close_prev) / 3
+    s1 = (2 * p) - high_prev
+    r1 = (2 * p) - low_prev
+    
+    # Logic
     if (curr_price > ema9) and (ema9 > ema20):
         if curr_price <= r1 + (r1 * 0.002):
             sl, tp = calculate_trade_levels(df, "BUY")
-            return f"🚀 BULLISH SETUP: {ticker}\nEntry: {curr_price:.2f}\nSL: {sl:.2f}\nTP: {tp:.2f}\nLogic: Trend + Support"
+            return f"🚀 BULLISH SETUP: {ticker}\nEntry: {curr_price:.2f}\nSL: {sl:.2f}\nTP: {tp:.2f}"
             
-    # BEARISH: Price < 20EMA and 9EMA < 20EMA + Near Resistance
     if (curr_price < ema20) and (ema9 < ema20):
         if curr_price >= s1 - (s1 * 0.002):
             sl, tp = calculate_trade_levels(df, "SELL")
-            return f"📉 BEARISH SETUP: {ticker}\nEntry: {curr_price:.2f}\nSL: {sl:.2f}\nTP: {tp:.2f}\nLogic: Trend + Resistance"
+            return f"📉 BEARISH SETUP: {ticker}\nEntry: {curr_price:.2f}\nSL: {sl:.2f}\nTP: {tp:.2f}"
             
     return None
-
-st.title("🔥 Sachin-Pro: 9/20 EMA + S&R Engine")
-
-if st.button("Activate Trade Bot"):
-    st.write("Engine running... monitoring 1H Timeframe...")
-    # Confirmation message
-    send_msg("✅ Sachin Bhai, Naya 9/20 EMA + S&R Bot successfully start ho gaya hai! Monitoring chal rahi hai.")
-    
-    while True:
-        signal = check_signals("BTC-USD")
-        if signal:
-            send_msg(signal)
-            st.success(signal)
-        time.sleep(60) # 1 minute wait
