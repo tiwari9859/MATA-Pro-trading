@@ -1,63 +1,66 @@
 import streamlit as st
 import yfinance as yf
-import plotly.graph_objects as go
+import requests
 import time
 
-st.set_page_config(layout="wide")
-st.title("Sachin-Trader-Pro Master Terminal")
+# Aapki Details
+TOKEN = "8666809875:AAE_BxvQ0t54uOSTSaujZQmqQnM9gWMkdbg"
+CHAT_ID = "8963973514"
 
-# Sidebar
-ticker = st.sidebar.selectbox("Select Asset", ["BTC-USD", "ETH-USD"])
-timeframe = st.sidebar.selectbox("Select Timeframe", ["1h", "4h", "1d"])
+def send_msg(text):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text={text}"
+    requests.get(url)
 
-# Sidebar News
-st.sidebar.subheader("Latest News")
-ticker_obj = yf.Ticker(ticker)
-news = ticker_obj.news
-for item in news[:5]:
-    st.sidebar.markdown(f"[{item.get('title', 'Read News')}]({item.get('link', '#')})")
+def calculate_trade_levels(df, type):
+    last_row = df.iloc[-1]
+    # Risk Reward 1:2 logic
+    if type == "BUY":
+        sl = last_row['Low'] - (last_row['Close'] * 0.003)
+        tp = last_row['Close'] + ((last_row['Close'] - sl) * 2)
+        return sl, tp
+    else:
+        sl = last_row['High'] + (last_row['Close'] * 0.003)
+        tp = last_row['Close'] - ((sl - last_row['Close']) * 2)
+        return sl, tp
 
-@st.cache_data(ttl=30)
-def get_data(symbol, tf):
-    df = yf.download(symbol, period="1mo", interval=tf)
-    df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+def check_signals(ticker):
+    df = yf.download(ticker, period="10d", interval="1h")
     df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
     df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
-    df['Pivot'] = (df['High'] + df['Low'] + df['Close']) / 3
-    df['R1'] = (2 * df['Pivot']) - df['Low']
-    df['S1'] = (2 * df['Pivot']) - df['High']
-    return df
+    
+    # Pivot calculation
+    p = (df['High'].iloc[-2] + df['Low'].iloc[-2] + df['Close'].iloc[-2]) / 3
+    s1 = (2 * p) - df['High'].iloc[-2]
+    r1 = (2 * p) - df['Low'].iloc[-2]
+    
+    curr_price = df['Close'].iloc[-1]
+    ema9 = df['EMA9'].iloc[-1]
+    ema20 = df['EMA20'].iloc[-1]
+    
+    # BULLISH: Price > 9EMA and 9EMA > 20EMA + Near Support
+    if (curr_price > ema9) and (ema9 > ema20):
+        if curr_price <= r1 + (r1 * 0.002):
+            sl, tp = calculate_trade_levels(df, "BUY")
+            return f"🚀 BULLISH SETUP: {ticker}\nEntry: {curr_price:.2f}\nSL: {sl:.2f}\nTP: {tp:.2f}\nLogic: Trend + Support"
+            
+    # BEARISH: Price < 20EMA and 9EMA < 20EMA + Near Resistance
+    if (curr_price < ema20) and (ema9 < ema20):
+        if curr_price >= s1 - (s1 * 0.002):
+            sl, tp = calculate_trade_levels(df, "SELL")
+            return f"📉 BEARISH SETUP: {ticker}\nEntry: {curr_price:.2f}\nSL: {sl:.2f}\nTP: {tp:.2f}\nLogic: Trend + Resistance"
+            
+    return None
 
-df = get_data(ticker, timeframe)
+st.title("🔥 Sachin-Pro: 9/20 EMA + S&R Engine")
 
-if not df.empty:
-    col1, col2, col3 = st.columns(3)
-    col1.metric("LIVE PRICE", f"${float(df['Close'].iloc[-1]):,.2f}")
-    col2.metric("MARKET TREND", "BULLISH" if df['EMA9'].iloc[-1] > df['EMA20'].iloc[-1] else "BEARISH")
-    col3.metric("RANGE (High-Low)", f"${float(df['High'].max() - df['Low'].min()):,.2f}")
-
-    # TradingView Style Chart
-    fig = go.Figure(data=[go.Candlestick(
-        x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-        increasing_line_color='#26a69a', decreasing_line_color='#ef5350'
-    )])
+if st.button("Activate Trade Bot"):
+    st.write("Engine running... monitoring 1H Timeframe...")
+    # Confirmation message
+    send_msg("✅ Sachin Bhai, Naya 9/20 EMA + S&R Bot successfully start ho gaya hai! Monitoring chal rahi hai.")
     
-    fig.add_trace(go.Scatter(x=df.index, y=df['EMA9'], name='EMA 9', line=dict(color='#2962ff', width=1.5)))
-    fig.add_trace(go.Scatter(x=df.index, y=df['EMA20'], name='EMA 20', line=dict(color='#ff6d00', width=1.5)))
-    fig.add_trace(go.Scatter(x=df.index, y=df['R1'], name='Resistance', line=dict(color='#ef5350', width=1, dash='dash')))
-    fig.add_trace(go.Scatter(x=df.index, y=df['S1'], name='Support', line=dict(color='#26a69a', width=1, dash='dash')))
-    
-    fig.update_layout(
-        template="plotly_dark",
-        xaxis_rangeslider_visible=False,
-        yaxis=dict(side="right", title="Price"),
-        height=600,
-        uirevision='constant',
-        margin=dict(l=10, r=50, t=30, b=30)
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Auto-update
-    time.sleep(10)
-    st.rerun()
+    while True:
+        signal = check_signals("BTC-USD")
+        if signal:
+            send_msg(signal)
+            st.success(signal)
+        time.sleep(60) # 1 minute wait
