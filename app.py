@@ -54,9 +54,3 @@ def check_signals(ticker):
 st.title("🔥 Sachin-Pro: Advanced Signal Engine")
 if st.button("Activate Trade Bot"):
     st.write("Engine running... monitoring 1H Timeframe...")
-    while True:
-        signal = check_signals("BTC-USD")
-        if signal:
-            send_msg(signal)
-            st.success(signal)
-        time.sleep(10) # 10 second mein check karega
