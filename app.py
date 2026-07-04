@@ -1,33 +1,34 @@
 import streamlit as st
 import yfinance as yf
-import requests
-import time
+import pandas as pd
 
-# Telegram Settings
-TOKEN = "8666809875:AAE_BxvQ0t54uOSTSaujZQmqQnM9gWMkdbg"
-CHAT_ID = "8963973514"
+# Page setup
+st.set_page_config(page_title="Sachin-Pro", layout="wide")
+st.title("📈 Sachin-Pro: Live Trading Desk")
 
-st.title("🔥 Sachin-Pro: Simple Bot")
+# 1. Data Fetching
+@st.cache_data(ttl=60)
+def get_data():
+    df = yf.download("BTC-USD", period="1d", interval="1h", progress=False)
+    df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
+    df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+    return df
 
-# Engine
-if st.button("Start"):
-    st.write("Bot is running...")
-    while True:
-        try:
-            df = yf.download("BTC-USD", period="5d", interval="1h", progress=False)
-            df['EMA9'] = df['Close'].ewm(span=9, adjust=False).mean()
-            df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
-            
-            curr = float(df['Close'].iloc[-1])
-            e9 = float(df['EMA9'].iloc[-1])
-            e20 = float(df['EMA20'].iloc[-1])
-            
-            # Logic
-            if e9 > e20 and curr > e9:
-                requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text=🚀 BUY SIGNAL: BTC {curr:.2f}")
-            elif e9 < e20 and curr < e20:
-                requests.get(f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={CHAT_ID}&text=📉 SELL SIGNAL: BTC {curr:.2f}")
-            
-            time.sleep(3600) # Wait 1 hour
-        except:
-            time.sleep(60) # Agar error aaye toh 1 min baad fir koshish karega
+df = get_data()
+curr_price = float(df['Close'].iloc[-1])
+
+# 2. Metrics
+c1, c2, c3 = st.columns(3)
+c1.metric("Live Price", f"${curr_price:,.2f}")
+c2.metric("9 EMA", f"{df['EMA9'].iloc[-1]:.2f}")
+c3.metric("20 EMA", f"{df['EMA20'].iloc[-1]:.2f}")
+
+# 3. Chart
+st.subheader("Live Market Trend (1H)")
+st.line_chart(df[['Close', 'EMA9', 'EMA20']])
+
+# 4. Market Updates
+st.subheader("📰 Market Updates")
+st.write("• Strategy: 9/20 EMA Crossover Monitoring")
+st.write("• Timeframe: 1 Hour")
+st.write("• Status: Dashboard is live and tracking market movement.")
